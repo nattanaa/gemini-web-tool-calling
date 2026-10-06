@@ -3,39 +3,120 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Gemini Web Tool Calling</title>
+        <title>NYC Student Helper</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap" rel="stylesheet" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
         <style>
+            :root {
+                --ink: #23323b;
+                --muted: #7d8a8f;
+                --line: #e4ddd0;
+                --soft: #f4efe6;
+                --paper: #fffdf8;
+                --teal: #79bdb6;
+                --slate: #2f5468;
+                --taxi: #e2b84b;      /* mustard */
+                --brick: #b8574f;
+                --pink: #d98f8b;
+                --sage: #8fb07a;
+                --lilac: #9b84a8;
+                /* one color per tool family, like subway line colors */
+                --law: #2f5468;
+                --units: #b8574f;
+                --places: #5f8f4e;
+            }
             * {
                 box-sizing: border-box;
                 margin: 0;
                 padding: 0;
             }
             body {
-                font-family: system-ui, sans-serif;
+                font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+                color: var(--ink);
+                background: var(--teal);
                 height: 100vh;
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                padding: 3rem 1rem;
+                padding: 2rem 1rem;
             }
             #container {
                 width: 100%;
                 max-width: 900px;
                 display: flex;
                 flex-direction: column;
-                border: 1px solid #e0e0e0;
+                border: none;
+                background: var(--paper);
+                max-height: 100%;
+                box-shadow: 0 12px 40px rgba(35, 50, 59, 0.18);
             }
+
+            /* ---------- header: a subway-sign strip ---------- */
+            #header {
+                background: var(--slate);
+                color: #fff;
+                padding: 1rem 1.5rem;
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            }
+            #skyline { display: block; width: 100%; height: 56px; background: var(--paper); border-bottom: 4px solid var(--taxi); }
+            #header .bullets { display: flex; gap: 0.3rem; }
+            #header .bullet { box-shadow: 0 0 0 2px var(--slate), 0 0 0 3px rgba(255,255,255,0.35); }
+            #header .grow { flex: 1; min-width: 0; }
+            #header h1 {
+                font-family: "DM Serif Display", Georgia, serif;
+                font-size: 1.6rem;
+                font-weight: 400;
+                letter-spacing: 0.01em;
+                line-height: 1.1;
+            }
+            #header p {
+                font-size: 0.8rem;
+                color: #c9dbe2;
+                margin-top: 0.2rem;
+            }
+            #new-chat {
+                background: transparent;
+                border: 1px solid rgba(255, 255, 255, 0.45);
+                color: #fff;
+                padding: 0.5rem 0.9rem;
+            }
+            #new-chat:hover { border-color: #fff; }
+
+            /* round route-style badge */
+            .bullet {
+                width: 1.6rem;
+                height: 1.6rem;
+                border-radius: 50%;
+                display: inline-grid;
+                place-items: center;
+                color: #fff;
+                font-weight: 700;
+                font-size: 0.8rem;
+                flex-shrink: 0;
+                line-height: 1;
+            }
+            .bullet.law { background: var(--law); }
+            .bullet.units { background: var(--units); }
+            .bullet.places { background: var(--places); }
+            .bullet.other { background: #808183; }
+
+            /* ---------- messages ---------- */
             #messages {
                 overflow-y: auto;
                 padding: 2rem;
                 display: flex;
                 flex-direction: column;
-                gap: 1.5rem;
-                min-height: 450px;
-                max-height: 70vh;
+                gap: 1.25rem;
+                min-height: 420px;
+                flex: 1;
             }
             .msg {
-                line-height: 1.5;
+                line-height: 1.55;
                 max-width: 80%;
             }
             .msg.user {
@@ -43,81 +124,362 @@
                 text-align: right;
             }
             .msg .role {
-                font-size: 0.75rem;
+                font-size: 0.7rem;
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
-                color: #999;
+                color: var(--muted);
                 margin-bottom: 0.25rem;
             }
-            .msg.loading .content {
-                color: #999;
+            .msg.user .content {
+                background: var(--slate);
+                color: #fff;
+                padding: 0.55rem 0.95rem;
+                border-radius: 14px 14px 4px 14px;
+                display: inline-block;
+                text-align: left;
             }
+            .msg.assistant { max-width: 90%; }
+            .msg.loading .content { color: var(--muted); }
+            .msg.loading .content::after {
+                content: "";
+                animation: dots 1.2s steps(4) infinite;
+            }
+            @keyframes dots {
+                0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; }
+            }
+
+            /* rendered markdown */
+            .msg.assistant .content p { margin: 0 0 0.6rem; }
+            .msg.assistant .content p:last-child { margin-bottom: 0; }
+            .msg.assistant .content ul,
+            .msg.assistant .content ol { margin: 0.25rem 0 0.75rem 1.25rem; }
+            .msg.assistant .content li { margin: 0.25rem 0; }
+            .msg.assistant .content h1,
+            .msg.assistant .content h2,
+            .msg.assistant .content h3 { font-size: 1rem; margin: 0.9rem 0 0.35rem; }
+            .msg.assistant .content a { color: var(--brick); }
+            .msg.assistant .content code { background: var(--soft); padding: 0 0.25rem; }
+
+            /* ---------- tool calls: one row per stop ---------- */
+            details.tool {
+                font-size: 0.85rem;
+                color: #444;
+                background: var(--soft);
+                border-left: 4px solid #808183;
+                padding: 0.5rem 0.75rem;
+                margin: -0.5rem 0;
+            }
+            details.tool.law { border-left-color: var(--law); }
+            details.tool.units { border-left-color: var(--units); }
+            details.tool.places { border-left-color: var(--places); }
+            details.tool summary {
+                cursor: pointer;
+                list-style: none;
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+            }
+            details.tool summary::-webkit-details-marker { display: none; }
+            details.tool summary .chev { margin-left: auto; color: var(--muted); font-size: 0.75rem; }
+            details.tool[open] summary .chev { transform: rotate(90deg); }
+            details.tool .bullet { width: 1.35rem; height: 1.35rem; font-size: 0.7rem; }
+            details.tool .raw {
+                font-family: ui-monospace, monospace;
+                font-size: 0.72rem;
+                color: #555;
+                white-space: pre-wrap;
+                word-break: break-word;
+                margin-top: 0.5rem;
+                max-height: 240px;
+                overflow-y: auto;
+            }
+            details.tool.failed summary .text { color: #b91c1c; }
+
+            /* ---------- welcome screen ---------- */
+            .empty { margin: auto; text-align: center; }
+            .hero {
+                display: block;
+                width: min(340px, 85%);
+                height: auto;
+                margin: 0 auto 1.25rem;
+                overflow: visible;
+            }
+            .empty h2 {
+                font-family: "DM Serif Display", Georgia, serif;
+                font-size: 2.1rem;
+                font-weight: 400;
+                color: var(--slate);
+                margin-bottom: 0.35rem;
+            }
+            .empty > p { color: var(--muted); max-width: 46ch; margin: 0 auto; }
+            #suggestions {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 0.4rem;
+                padding: 0 1.5rem 0.9rem;
+            }
+            #suggestions[hidden] { display: none; }
+            .dot {
+                width: 0.5rem;
+                height: 0.5rem;
+                border-radius: 50%;
+                display: inline-block;
+                margin-right: 0.4rem;
+                vertical-align: 0.05em;
+            }
+            .dot.law { background: var(--law); }
+            .dot.units { background: var(--units); }
+            .dot.places { background: var(--places); }
+            .lines { display: grid; gap: 1.1rem; }
+            .line-head {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                font-weight: 700;
+                font-size: 0.9rem;
+                margin-bottom: 0.5rem;
+            }
+            .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+            .chip {
+                background: var(--paper);
+                color: var(--ink);
+                border: 1px solid var(--line);
+                border-radius: 999px;
+                padding: 0.3rem 0.7rem;
+                font-size: 0.75rem;
+                text-transform: none;
+                letter-spacing: 0;
+            }
+            .chip:hover { border-color: var(--slate); background: var(--soft); }
+
+            /* ---------- input ---------- */
             #input-area {
                 display: flex;
                 gap: 1rem;
-                padding: 1.5rem;
-                border-top: 1px solid #e0e0e0;
+                padding: 1.25rem 1.5rem 0.5rem;
+                border-top: 1px solid var(--line);
             }
             #user-input {
                 flex: 1;
+                background: transparent;
+                color: var(--ink);
                 padding: 0.75rem 0;
                 border: none;
-                border-bottom: 1px solid #e0e0e0;
+                border-bottom: 1px solid var(--line);
                 font-size: 1rem;
+                font-family: inherit;
                 outline: none;
             }
-            #user-input:focus {
-                border-bottom-color: #000;
-            }
+            #user-input:focus { border-bottom-color: var(--slate); }
             button {
                 padding: 0.75rem 1.5rem;
-                background: #000;
+                background: var(--brick);
                 color: #fff;
                 border: none;
+                font-family: inherit;
                 font-size: 0.75rem;
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
                 cursor: pointer;
             }
-            .tool {
-                font-family: ui-monospace, monospace;
-                font-size: 0.75rem;
-                color: #555;
-                background: #f5f5f5;
-                border-left: 3px solid #f59e0b;
-                padding: 0.5rem 0.75rem;
-                margin: 0.25rem 0 0.75rem;
-                white-space: pre-wrap;
-                word-break: break-word;
+            button:disabled { opacity: 0.3; cursor: default; }
+            button:focus-visible { outline: 2px solid var(--taxi); outline-offset: 2px; }
+            #user-input:focus-visible { outline: none; border-bottom: 2px solid var(--taxi); }
+            #note {
+                font-size: 0.72rem;
+                color: var(--muted);
+                padding: 0 1.5rem 0.9rem;
             }
-            .tool .label {
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                color: #b45309;
+
+            @media (max-width: 600px) {
+                body { padding: 0; align-items: stretch; }
+                #container { border: none; }
+                #messages { padding: 1.25rem 1rem; }
+                #header { padding: 0.85rem 1rem; }
+                #header .bullets, #header p { display: none; }
+                #header h1 { font-size: 1.3rem; }
+                #skyline { height: 40px; }
+                .msg, .msg.assistant { max-width: 100%; }
+                #input-area { padding: 1rem 1rem 0.4rem; }
+                #note { padding: 0 1rem 0.75rem; }
+                #suggestions { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; padding: 0 1rem 0.75rem; }
+                .chip { white-space: nowrap; }
             }
-            button:disabled {
-                opacity: 0.3;
+            @media (prefers-reduced-motion: reduce) {
+                .msg.loading .content::after { animation: none; content: "..."; }
             }
         </style>
     </head>
     <body>
         <div id="container">
-            <div id="messages"></div>
+            <div id="header">
+                <div class="bullets" aria-hidden="true">
+                    <span class="bullet law">§</span>
+                    <span class="bullet units">°</span>
+                    <span class="bullet places">★</span>
+                </div>
+                <div class="grow">
+                    <h1>NYC Student Helper</h1>
+                    <p>For international students settling into New York</p>
+                </div>
+                <button id="new-chat" type="button">New chat</button>
+            </div>
+            <svg id="skyline" viewBox="0 0 900 56" preserveAspectRatio="xMidYMax slice" aria-hidden="true"></svg>
+
+            <div id="messages">
+                <div class="empty" id="empty">
+                    <svg class="hero" viewBox="0 0 360 180" role="img" aria-label="Illustration of a New York street with walk-up buildings, a taxi and a subway entrance">
+                        <!-- sidewalk -->
+                        <rect x="0" y="166" width="360" height="14" fill="#e4ddd0" />
+                        <!-- lamp post -->
+                        <rect x="18" y="96" width="3" height="70" fill="#2f5468" />
+                        <path d="M12 96 h15 l-3 -9 h-9 z" fill="#2f5468" />
+                        <circle cx="19.5" cy="99" r="3" fill="#e2b84b" />
+                        <!-- back building -->
+                        <rect x="226" y="78" width="72" height="88" fill="#9b84a8" />
+                        <rect x="222" y="73" width="80" height="6" fill="#2f5468" />
+                        <g fill="#fffdf8">
+                            <rect x="236" y="88" width="12" height="16" /><rect x="256" y="88" width="12" height="16" /><rect x="276" y="88" width="12" height="16" />
+                            <rect x="236" y="112" width="12" height="16" /><rect x="256" y="112" width="12" height="16" /><rect x="276" y="112" width="12" height="16" />
+                        </g>
+                        <!-- brick walk-up -->
+                        <rect x="40" y="40" width="100" height="126" fill="#b8574f" />
+                        <rect x="35" y="33" width="110" height="8" fill="#2f5468" />
+                        <g fill="#fffdf8">
+                            <rect x="52" y="52" width="16" height="20" /><rect x="82" y="52" width="16" height="20" /><rect x="112" y="52" width="16" height="20" />
+                            <rect x="52" y="80" width="16" height="20" /><rect x="82" y="80" width="16" height="20" /><rect x="112" y="80" width="16" height="20" />
+                            <rect x="52" y="108" width="16" height="20" /><rect x="82" y="108" width="16" height="20" /><rect x="112" y="108" width="16" height="20" />
+                            <rect x="52" y="138" width="16" height="20" /><rect x="112" y="138" width="16" height="20" />
+                        </g>
+                        <rect x="80" y="136" width="20" height="30" fill="#2f5468" />
+                        <rect x="76" y="132" width="28" height="4" fill="#e4ddd0" />
+                        <!-- fire escape -->
+                        <g stroke="#23323b" stroke-width="1.5" fill="none">
+                            <path d="M47 74 h56 M47 102 h56 M47 130 h56" stroke-width="3" />
+                            <path d="M47 74 v-8 h56 v8 M47 102 v-8 h56 v8 M47 130 v-8 h56 v8" />
+                            <path d="M55 66 v8 M63 66 v8 M71 66 v8 M79 66 v8 M87 66 v8 M95 66 v8" stroke-width="1" />
+                            <path d="M55 94 v8 M63 94 v8 M71 94 v8 M79 94 v8 M87 94 v8 M95 94 v8" stroke-width="1" />
+                            <path d="M55 122 v8 M63 122 v8 M71 122 v8 M79 122 v8 M87 122 v8 M95 122 v8" stroke-width="1" />
+                            <path d="M90 74 l10 20 M54 102 l10 20" />
+                        </g>
+                        <!-- water tower -->
+                        <g fill="#7a5440">
+                            <rect x="104" y="18" width="2" height="15" /><rect x="120" y="18" width="2" height="15" />
+                            <rect x="100" y="6" width="26" height="16" rx="2" />
+                            <path d="M98 7 L113 -4 L128 7 z" />
+                        </g>
+                        <path d="M102 12 h22 M102 17 h22" stroke="#5e3f2f" stroke-width="1" />
+                        <!-- pink walk-up with shop -->
+                        <rect x="142" y="62" width="84" height="104" fill="#d98f8b" />
+                        <rect x="138" y="56" width="92" height="7" fill="#2f5468" />
+                        <g fill="#fffdf8">
+                            <rect x="154" y="74" width="16" height="20" /><rect x="198" y="74" width="16" height="20" />
+                            <rect x="154" y="102" width="16" height="20" /><rect x="198" y="102" width="16" height="20" />
+                        </g>
+                        <path d="M146 130 h76 l-4 12 h-68 z" fill="#e2b84b" />
+                        <path d="M156 130 l-1 12 M168 130 v12 M180 130 v12 M192 130 v12 M204 130 v12 M214 130 l1 12" stroke="#fffdf8" stroke-width="2.5" />
+                        <rect x="152" y="144" width="38" height="22" fill="#fffdf8" />
+                        <rect x="198" y="144" width="18" height="22" fill="#2f5468" />
+                        <!-- taxi -->
+                        <path d="M248 148 l8 -12 h28 l8 12 z" fill="#e2b84b" />
+                        <path d="M253 147 l5 -8 h10 v8 z M272 147 v-8 h10 l5 8 z" fill="#c9dbe2" />
+                        <rect x="262" y="131" width="14" height="5" rx="1" fill="#fffdf8" />
+                        <rect x="234" y="147" width="72" height="14" rx="4" fill="#e2b84b" />
+                        <g fill="#23323b">
+                            <rect x="246" y="152" width="4" height="3" /><rect x="254" y="152" width="4" height="3" /><rect x="262" y="152" width="4" height="3" />
+                            <rect x="270" y="152" width="4" height="3" /><rect x="278" y="152" width="4" height="3" /><rect x="286" y="152" width="4" height="3" />
+                            <circle cx="252" cy="162" r="6" /><circle cx="290" cy="162" r="6" />
+                        </g>
+                        <circle cx="252" cy="162" r="2.5" fill="#e4ddd0" /><circle cx="290" cy="162" r="2.5" fill="#e4ddd0" />
+                        <!-- subway entrance globe -->
+                        <rect x="327" y="116" width="4" height="50" fill="#23323b" />
+                        <circle cx="329" cy="108" r="9" fill="#5f8f4e" />
+                        <circle cx="326" cy="105" r="3" fill="#8fb07a" />
+                        <rect x="319" y="126" width="20" height="9" rx="1" fill="#23323b" />
+                        <rect x="322" y="129" width="14" height="3" fill="#fffdf8" />
+                    </svg>
+                    <h2>Welcome to New York.</h2>
+                    <p>Ask about your rights as a renter or worker, convert US units, or find a place to explore.</p>
+                </div>
+            </div>
+
+            <div id="suggestions" aria-label="Suggested questions">
+                <button class="chip"><span class="dot law"></span>Can my landlord charge two months' deposit?</button>
+                <button class="chip"><span class="dot law"></span>Do I need a license for my dog?</button>
+                <button class="chip"><span class="dot units"></span>It's 45°F today. Is that cold?</button>
+                <button class="chip"><span class="dot units"></span>I'm 165 cm. How tall is that in feet?</button>
+                <button class="chip"><span class="dot places"></span>Biggest parks in the Bronx</button>
+                <button class="chip"><span class="dot places"></span>A museum in Brooklyn for a rainy day</button>
+            </div>
+
             <div id="input-area">
                 <input
                     type="text"
                     id="user-input"
-                    placeholder="Type a message..."
                     autocomplete="off"
+                    aria-label="Your question"
                 />
                 <button id="send-btn">Send</button>
             </div>
+            <p id="note">General information, not legal advice. In an emergency, call 911. For city services, call 311.</p>
         </div>
+
         <script>
+            // Draw a simple row of walk-ups in the header strip.
+            (function drawSkyline() {
+                const svg = document.getElementById("skyline");
+                const ns = "http://www.w3.org/2000/svg";
+                const colors = ["#b8574f", "#e8d9a8", "#d98f8b", "#9b84a8", "#8fb07a", "#b8574f", "#e2b84b", "#d98f8b"];
+                const rect = (x, y, w, h, fill) => {
+                    const r = document.createElementNS(ns, "rect");
+                    r.setAttribute("x", x); r.setAttribute("y", y);
+                    r.setAttribute("width", w); r.setAttribute("height", h);
+                    r.setAttribute("fill", fill);
+                    svg.appendChild(r);
+                };
+                let x = 0, i = 0;
+                while (x < 900) {
+                    const w = 58 + ((i * 37) % 34);
+                    const h = 26 + ((i * 53) % 28);
+                    const y = 56 - h;
+                    rect(x, y, w, h, colors[i % colors.length]);
+                    rect(x - 1, y, w + 2, 3, "#2f5468");               // cornice
+                    for (let row = y + 7; row < 50; row += 9) {         // windows
+                        for (let col = x + 7; col < x + w - 8; col += 11) rect(col, row, 5, 6, "#fffdf8");
+                    }
+                    x += w + 2;
+                    i++;
+                }
+            })();
+
             const messages = document.getElementById("messages");
             const userInput = document.getElementById("user-input");
             const sendBtn = document.getElementById("send-btn");
+            const emptyHTML = document.getElementById("empty").outerHTML;
             let sessionId = null;
+
+            // Which "line" each tool belongs to, and a plain-English description of the call.
+            const TOOL_INFO = {
+                list_ny_laws:         { kind: "law", mark: "§", say: (a) => a.keyword ? `Looked up law codes for "${a.keyword}"` : "Listed NY law codes" },
+                search_ny_law:        { kind: "law", mark: "§", say: (a) => `Searched ${a.law_id ? a.law_id.toUpperCase() + " law" : "all NY laws"} for "${a.query}"` },
+                get_ny_law_section:   { kind: "law", mark: "§", say: (a) => `Read ${String(a.law_id || "").toUpperCase()} § ${a.section}` },
+                convert_units:        { kind: "units", mark: "°", say: (a) => `Converted ${a.value} ${unitLabel(a.from_unit)} to ${unitLabel(a.to_unit)}` },
+                recommend_nyc_places: { kind: "places", mark: "★", say: (a) => {
+                    const what = a.category ? a.category + "s" : "places";
+                    const where = a.borough ? ` in ${a.borough}` : "";
+                    const kw = a.keyword ? ` matching "${a.keyword}"` : "";
+                    return `Looked for ${what}${where}${kw}`;
+                } },
+            };
+
+            // "f" -> "°F", "lb" stays "lb", "us_men_shoe" -> "US men's shoe"
+            function unitLabel(u) {
+                const x = String(u || "").toLowerCase();
+                if (["f", "c", "k", "fahrenheit", "celsius"].includes(x)) return "°" + x[0].toUpperCase();
+                return x.replace(/_shoe$/, " shoe").replace(/^us_/, "US ").replace(/^uk_/, "UK ")
+                        .replace(/^eu /, "EU ").replace(/^eu_/, "EU ").replace(/men /, "men's ").replace(/women /, "women's ");
+            }
 
             function addMessage(role, text, isLoading = false) {
                 const div = document.createElement("div");
@@ -125,25 +487,71 @@
                     "msg " +
                     (role === "you" ? "user" : "assistant") +
                     (isLoading ? " loading" : "");
-                div.innerHTML =
-                    '<div class="role">' +
-                    role +
-                    '</div><div class="content">' +
-                    text +
-                    "</div>";
+                const roleEl = document.createElement("div");
+                roleEl.className = "role";
+                roleEl.textContent = role;
+                const contentEl = document.createElement("div");
+                contentEl.className = "content";
+                contentEl.textContent = text;
+                div.append(roleEl, contentEl);
+                const empty = document.getElementById("empty");
+                if (empty) empty.remove();
+                document.getElementById("suggestions").hidden = true;
                 messages.appendChild(div);
                 messages.scrollTop = messages.scrollHeight;
                 return div;
             }
 
-            async function send() {
-                const text = userInput.value.trim();
-                if (!text) return;
+            // Turn the model's Markdown (**bold**, lists, headings) into safe HTML.
+            function renderMarkdown(el, text) {
+                if (window.marked && window.DOMPurify) {
+                    el.innerHTML = DOMPurify.sanitize(marked.parse(text || ""));
+                    el.querySelectorAll("a").forEach((a) => {
+                        a.target = "_blank";
+                        a.rel = "noopener";
+                    });
+                } else {
+                    el.style.whiteSpace = "pre-wrap";
+                    el.textContent = text || "";
+                }
+            }
+
+            function renderToolCall(call) {
+                const info = TOOL_INFO[call.name] || { kind: "other", mark: "?", say: () => `Used ${call.name}` };
+                let parsed = null;
+                try { parsed = JSON.parse(call.result); } catch (_) {}
+                const failed = parsed && parsed.error;
+
+                const div = document.createElement("details");
+                div.className = `tool ${info.kind}${failed ? " failed" : ""}`;
+                const summary = document.createElement("summary");
+                const bullet = document.createElement("span");
+                bullet.className = `bullet ${info.kind}`;
+                bullet.textContent = info.mark;
+                const text = document.createElement("span");
+                text.className = "text";
+                text.textContent = info.say(call.args || {}) + (failed ? " (no result)" : "");
+                const chev = document.createElement("span");
+                chev.className = "chev";
+                chev.textContent = "▶";
+                summary.append(bullet, text, chev);
+
+                const raw = document.createElement("div");
+                raw.className = "raw";
+                const pretty = parsed ? JSON.stringify(parsed, null, 2) : call.result;
+                raw.textContent = `${call.name}(${JSON.stringify(call.args)})\n→ ${pretty}`;
+                div.append(summary, raw);
+                return div;
+            }
+
+            async function send(textArg) {
+                const text = (textArg ?? userInput.value).trim();
+                if (!text || sendBtn.disabled) return;
 
                 userInput.value = "";
                 sendBtn.disabled = true;
                 addMessage("you", text);
-                const loading = addMessage("assistant", "Thinking...", true);
+                const loading = addMessage("assistant", "Next stop, your answer", true);
 
                 try {
                     const res = await fetch("/chat", {
@@ -154,39 +562,45 @@
                             session_id: sessionId,
                         }),
                     });
+                    if (!res.ok) throw new Error(`server responded ${res.status}`);
                     const data = await res.json();
                     sessionId = data.session_id;
 
                     // Show each tool the harness ran, above the assistant's answer
                     for (const call of data.tool_calls || []) {
-                        const div = document.createElement("div");
-                        div.className = "tool";
-                        const label = document.createElement("span");
-                        label.className = "label";
-                        label.textContent = "tool call  ";
-                        div.appendChild(label);
-                        div.appendChild(
-                            document.createTextNode(
-                                call.name + "(" + JSON.stringify(call.args) + ")\n→ " + call.result,
-                            ),
-                        );
-                        messages.insertBefore(div, loading);
+                        messages.insertBefore(renderToolCall(call), loading);
                     }
-                    loading.querySelector(".content").textContent =
-                        data.response;
+                    renderMarkdown(loading.querySelector(".content"), data.response);
                     loading.classList.remove("loading");
+                    messages.scrollTop = messages.scrollHeight;
                 } catch (e) {
                     loading.querySelector(".content").textContent =
-                        "Error: " + e.message;
+                        "Could not reach the server (" + e.message + "). Check that app.py is running, then try again.";
                     loading.classList.remove("loading");
                 }
                 sendBtn.disabled = false;
                 userInput.focus();
             }
 
-            sendBtn.addEventListener("click", send);
+            // Starter questions are sent with one click.
+            document.getElementById("suggestions").addEventListener("click", (e) => {
+                const chip = e.target.closest(".chip");
+                if (chip) send(chip.textContent);
+            });
+
+            document.getElementById("new-chat").addEventListener("click", () => {
+                if (sessionId) {
+                    fetch("/clear?session_id=" + encodeURIComponent(sessionId), { method: "POST" }).catch(() => {});
+                }
+                sessionId = null;
+                messages.innerHTML = emptyHTML;
+                document.getElementById("suggestions").hidden = false;
+                userInput.focus();
+            });
+
+            sendBtn.addEventListener("click", () => send());
             userInput.addEventListener("keydown", function (e) {
-                if (e.key === "Enter") send();
+                if (e.key === "Enter" && !e.isComposing) send();
             });
             userInput.focus();
         </script>
