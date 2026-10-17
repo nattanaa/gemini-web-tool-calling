@@ -4,7 +4,7 @@
 
 NYC Student Helper is a chat assistant for **international students who have just moved to New York City**. New arrivals face unfamiliar laws (Can my landlord keep my deposit?), unfamiliar units (Is 45°F cold?), and a huge city to explore. The assistant answers these questions by calling tools that look up real data, such as the official text of New York State law, instead of answering from memory, and it cites its sources.
 
-**Live app:** `<paste your Cloud Run URL here>` (no setup or API key needed)
+**Live app:** `https://gemini-web-tool-calling-git-2-188823946662.us-east4.run.app` (no setup or API key needed)
 
 ## Tools
 
